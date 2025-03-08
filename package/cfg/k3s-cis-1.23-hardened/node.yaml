@@ -1,6 +1,6 @@
 ---
 controls:
-version: 1.23
+version: "cis-1.23"
 id: 4
 text: "Worker Node Security Configuration"
 type: "node"
@@ -103,45 +103,13 @@ groups:
 
       - id: 4.1.7
         text: "Ensure that the certificate authorities file permissions are set to 644 or more restrictive (Manual)"
-        audit: "stat -c %a /var/lib/rancher/k3s/server/tls/server-ca.crt"
+        audit: "stat -c permissions=%a $kubeletcafile"
         tests:
           test_items:
-            - flag: "644"
+            - flag: "permissions"
               compare:
-                op: eq
+                op: bitmask
                 value: "644"
-              set: true
-            - flag: "640"
-              compare:
-                op: eq
-                value: "640"
-              set: true
-            - flag: "600"
-              compare:
-                op: eq
-                value: "600"
-              set: true
-            - flag: "444"
-              compare:
-                op: eq
-                value: "444"
-              set: true
-            - flag: "440"
-              compare:
-                op: eq
-                value: "440"
-              set: true
-            - flag: "400"
-              compare:
-                op: eq
-                value: "400"
-              set: true
-            - flag: "000"
-              compare:
-                op: eq
-                value: "000"
-              set: true
-          bin_op: or
         remediation: |
           Run the following command to modify the file permissions of the
           --client-ca-file chmod 644 <filename>
@@ -149,7 +117,7 @@ groups:
 
       - id: 4.1.8
         text: "Ensure that the client certificate authorities file ownership is set to root:root (Manual)"
-        audit: "stat -c %U:%G /var/lib/rancher/k3s/server/tls/client-ca.crt"
+        audit: "stat -c %U:%G $kubeletcafile"
         tests:
           test_items:
             - flag: root:root
@@ -184,8 +152,8 @@ groups:
           test_items:
             - flag: root:root
         remediation: |
-          Run the following command (using the config file location identified in the Audit step)
-          chown root:root $kubeletconf
+          Not Applicable.
+          The kubelet is embedded in the k3s process. There is no kubelet config file, all configuration is passed in as arguments at runtime.
         scored: true
 
   - id: 4.2
@@ -193,7 +161,7 @@ groups:
     checks:
       - id: 4.2.1
         text: "Ensure that the --anonymous-auth argument is set to false (Automated)"
-        audit: '/bin/sh -c ''if test $(journalctl -D /var/log/journal -u k3s | grep "Running kube-apiserver" | wc -l) -gt 0; then journalctl -D /var/log/journal -u k3s | grep "Running kube-apiserver" | tail -n1 | grep "anonymous-auth" | grep -v grep; else echo "--anonymous-auth=false"; fi'' '
+        audit: '/bin/sh -c ''if test $(journalctl -m -u k3s | grep  "Running kube-apiserver" | wc -l) -gt 0; then journalctl -m -u k3s | grep  "Running kube-apiserver" | tail -n1 | grep "anonymous-auth" | grep -v grep; else echo "--anonymous-auth=false"; fi'' '
         tests:
           test_items:
             - flag: "--anonymous-auth"
@@ -216,7 +184,7 @@ groups:
 
       - id: 4.2.2
         text: "Ensure that the --authorization-mode argument is not set to AlwaysAllow (Automated)"
-        audit: '/bin/sh -c ''if test $(journalctl -D /var/log/journal -u k3s | grep "Running kube-apiserver" | wc -l) -gt 0; then journalctl -D /var/log/journal -u k3s | grep "Running kube-apiserver" | tail -n1 | grep "authorization-mode" | grep -v grep; else echo "--authorization-mode=Webhook"; fi'' '
+        audit: '/bin/sh -c ''if test $(journalctl -m -u k3s | grep  "Running kube-apiserver" | wc -l) -gt 0; then journalctl -m -u k3s | grep  "Running kube-apiserver" | tail -n1 | grep "authorization-mode" | grep -v grep; else echo "--authorization-mode=Webhook"; fi'' '
         tests:
           test_items:
             - flag: --authorization-mode
@@ -238,7 +206,7 @@ groups:
 
       - id: 4.2.3
         text: "Ensure that the --client-ca-file argument is set as appropriate (Automated)"
-        audit: '/bin/sh -c ''if test $(journalctl -D /var/log/journal -u k3s | grep "Running kube-apiserver" | wc -l) -gt 0; then journalctl -D /var/log/journal -u k3s | grep "Running kube-apiserver" | tail -n1 | grep "client-ca-file" | grep -v grep; else echo "--client-ca-file=/var/lib/rancher/k3s/server/tls/request-header-ca.crt"; fi'' '
+        audit: '/bin/sh -c ''if test $(journalctl -m -u k3s | grep  "Running kube-apiserver" | wc -l) -gt 0; then journalctl -m -u k3s | grep  "Running kube-apiserver" | tail -n1 | grep "client-ca-file" | grep -v grep; else echo "--client-ca-file=/var/lib/rancher/k3s/server/tls/request-header-ca.crt"; fi'' '
         tests:
           test_items:
             - flag: --client-ca-file
@@ -258,7 +226,7 @@ groups:
 
       - id: 4.2.4
         text: "Ensure that the --read-only-port argument is set to 0 (Manual)"
-        audit: "journalctl -D /var/log/journal -u k3s | grep 'Running kubelet' | tail -n1 | grep 'read-only-port' "
+        audit: "journalctl -D /var/log/journal -u k3s -u k3s-agent | grep 'Running kubelet' | tail -n1 | grep 'read-only-port' "
         tests:
           bin_op: or
           test_items:
@@ -283,7 +251,7 @@ groups:
 
       - id: 4.2.5
         text: "Ensure that the --streaming-connection-idle-timeout argument is not set to 0 (Manual)"
-        audit: "journalctl -D /var/log/journal -u k3s | grep 'Running kubelet' | tail -n1 | grep 'streaming-connection-idle-timeout'"
+        audit: "journalctl -D /var/log/journal -u k3s -u k3s-agent | grep 'Running kubelet' | tail -n1 | grep 'streaming-connection-idle-timeout'"
         tests:
           test_items:
             - flag: --streaming-connection-idle-timeout
@@ -309,7 +277,7 @@ groups:
 
       - id: 4.2.6
         text: "Ensure that the --protect-kernel-defaults argument is set to true (Automated)"
-        audit: "journalctl -D /var/log/journal -u k3s | grep 'Running kubelet' | tail -n1 | grep 'protect-kernel-defaults'"
+        audit: "journalctl -D /var/log/journal -u k3s -u k3s-agent | grep 'Running kubelet' | tail -n1 | grep 'protect-kernel-defaults'"
         tests:
           test_items:
             - flag: --protect-kernel-defaults
@@ -331,7 +299,7 @@ groups:
 
       - id: 4.2.7
         text: "Ensure that the --make-iptables-util-chains argument is set to true (Automated)"
-        audit: "journalctl -D /var/log/journal -u k3s | grep 'Running kubelet' | tail -n1 | grep 'make-iptables-util-chains'"
+        audit: "journalctl -D /var/log/journal -u k3s -u k3s-agent | grep 'Running kubelet' | tail -n1 | grep 'make-iptables-util-chains'"
         tests:
           test_items:
             - flag: --make-iptables-util-chains
@@ -398,7 +366,7 @@ groups:
 
       - id: 4.2.10
         text: "Ensure that the --tls-cert-file and --tls-private-key-file arguments are set as appropriate (Manual)"
-        audit:  "journalctl -D /var/log/journal -u k3s | grep 'Running kubelet' | tail -n1"
+        audit: "journalctl -D /var/log/journal -u k3s -u k3s-agent | grep 'Running kubelet' | tail -n1"
         tests:
           test_items:
             - flag: --tls-cert-file
@@ -420,7 +388,7 @@ groups:
         scored: false
 
       - id: 4.2.11
-        text: "Ensure that the --rotate-certificates argument is not set to false (Manual)"
+        text: "Ensure that the --rotate-certificates argument is not set to false (Automated)"
         audit: "/bin/ps -fC $kubeletbin"
         audit_config: "/bin/sh -c 'if test -e $kubeletconf; then /bin/cat $kubeletconf; fi' "
         tests:
@@ -447,7 +415,7 @@ groups:
         scored: true
 
       - id: 4.2.12
-        text: "Verify that the RotateKubeletServerCertificate argument is set to true (Manual)"
+        text: "Verify that the RotateKubeletServerCertificate argument is set to true (Automated)"
         audit: "/bin/ps -fC $kubeletbin"
         type: "skip"
         tests:
@@ -468,7 +436,7 @@ groups:
           Based on your system, restart the kubelet service. For example:
           systemctl daemon-reload
           systemctl restart kubelet.service
-        scored: false
+        scored: true
 
       - id: 4.2.13
         text: "Ensure that the Kubelet only makes use of Strong Cryptographic Ciphers (Manual)"

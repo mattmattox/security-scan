@@ -1,6 +1,6 @@
 ---
 controls:
-version: 1.23
+version: "cis-1.23"
 id: 5
 text: "Kubernetes Policies"
 type: "policies"
@@ -57,7 +57,7 @@ groups:
           to the Kubernetes API server.
           Modify the configuration of each default service account to include this value
           automountServiceAccountToken: false
-        scored: false
+        scored: true
 
       - id: 5.1.6
         text: "Ensure that Service Account Tokens are only mounted where necessary (Manual)"
@@ -106,7 +106,7 @@ groups:
         remediation: |
           Add policies to each namespace in the cluster which has user workloads to restrict the
           admission of `hostPID` containers.
-        scored: false
+        scored: true
 
       - id: 5.2.4
         text: "Minimize the admission of containers wishing to share the host IPC namespace (Automated)"
@@ -114,7 +114,7 @@ groups:
         remediation: |
           Add policies to each namespace in the cluster which has user workloads to restrict the
           admission of `hostIPC` containers.
-        scored: false
+        scored: true
 
       - id: 5.2.5
         text: "Minimize the admission of containers wishing to share the host network namespace (Automated)"
@@ -122,10 +122,10 @@ groups:
         remediation: |
           Add policies to each namespace in the cluster which has user workloads to restrict the
           admission of `hostNetwork` containers.
-        scored: false
+        scored: true
 
       - id: 5.2.6
-        text: "Minimize the admission of containers with allowPrivilegeEscalation (Automated)"
+        text: "Minimize the admission of containers with allowPrivilegeEscalation (Manual)"
         type: "manual"
         remediation: |
           Add policies to each namespace in the cluster which has user workloads to restrict the
@@ -133,7 +133,7 @@ groups:
         scored: false
 
       - id: 5.2.7
-        text: "Minimize the admission of root containers (Automated)"
+        text: "Minimize the admission of root containers (Manual)"
         type: "manual"
         remediation: |
           Create a policy for each namespace in the cluster, ensuring that either `MustRunAsNonRoot`
@@ -141,7 +141,7 @@ groups:
         scored: false
 
       - id: 5.2.8
-        text: "Minimize the admission of containers with the NET_RAW capability (Automated)"
+        text: "Minimize the admission of containers with the NET_RAW capability (Manual)"
         type: "manual"
         remediation: |
           Add policies to each namespace in the cluster which has user workloads to restrict the
@@ -149,7 +149,7 @@ groups:
         scored: false
 
       - id: 5.2.9
-        text: "Minimize the admission of containers with added capabilities (Automated)"
+        text: "Minimize the admission of containers with added capabilities (Manual)"
         type: "manual"
         remediation: |
           Ensure that `allowedCapabilities` is not present in policies for the cluster unless

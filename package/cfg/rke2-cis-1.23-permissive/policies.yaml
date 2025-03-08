@@ -1,6 +1,6 @@
 ---
 controls:
-version: 1.23
+version: "cis-1.23"
 id: 5
 text: "Kubernetes Policies"
 type: "policies"
@@ -98,7 +98,7 @@ groups:
         remediation: |
           Add policies to each namespace in the cluster which has user workloads to restrict the
           admission of `hostPID` containers.
-        scored: false
+        scored: true
 
       - id: 5.2.4
         text: "Minimize the admission of containers wishing to share the host IPC namespace (Automated)"
@@ -106,7 +106,7 @@ groups:
         remediation: |
           Add policies to each namespace in the cluster which has user workloads to restrict the
           admission of `hostIPC` containers.
-        scored: false
+        scored: true
 
       - id: 5.2.5
         text: "Minimize the admission of containers wishing to share the host network namespace (Automated)"
@@ -114,7 +114,7 @@ groups:
         remediation: |
           Add policies to each namespace in the cluster which has user workloads to restrict the
           admission of `hostNetwork` containers.
-        scored: false
+        scored: true
 
       - id: 5.2.6
         text: "Minimize the admission of containers with allowPrivilegeEscalation (Automated)"
@@ -122,7 +122,7 @@ groups:
         remediation: |
           Add policies to each namespace in the cluster which has user workloads to restrict the
           admission of containers with `.spec.allowPrivilegeEscalation` set to `true`.
-        scored: false
+        scored: true
 
       - id: 5.2.7
         text: "Minimize the admission of root containers (Automated)"
@@ -130,7 +130,7 @@ groups:
         remediation: |
           Create a policy for each namespace in the cluster, ensuring that either `MustRunAsNonRoot`
           or `MustRunAs` with the range of UIDs not including 0, is set.
-        scored: false
+        scored: true
 
       - id: 5.2.8
         text: "Minimize the admission of containers with the NET_RAW capability (Automated)"
@@ -138,7 +138,7 @@ groups:
         remediation: |
           Add policies to each namespace in the cluster which has user workloads to restrict the
           admission of containers with the `NET_RAW` capability.
-        scored: false
+        scored: true
 
       - id: 5.2.9
         text: "Minimize the admission of containers with added capabilities (Automated)"
@@ -146,14 +146,14 @@ groups:
         remediation: |
           Ensure that `allowedCapabilities` is not present in policies for the cluster unless
           it is set to an empty array.
-        scored: false
+        scored: true
 
       - id: 5.2.10
         text: "Minimize the admission of containers with capabilities assigned (Manual)"
         type: "manual"
         remediation: |
-          Review the use of capabilites in applications running on your cluster. Where a namespace
-          contains applicaions which do not require any Linux capabities to operate consider adding
+          Review the use of capabilities in applications running on your cluster. Where a namespace
+          contains applications which do not require any Linux capabities to operate consider adding
           a PSP which forbids the admission of containers which do not drop all capabilities.
         scored: false
 

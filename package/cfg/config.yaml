@@ -45,6 +45,9 @@ master:
       - /etc/kubernetes/manifests/kube-scheduler.manifest
       - /var/snap/kube-scheduler/current/args
       - /var/lib/rancher/rke2/agent/pod-manifests/kube-scheduler.yaml
+    kubeconfig:
+      - /var/lib/rancher/k3s/server/cred/scheduler.kubeconfig
+      - /var/lib/rancher/rke2/server/cred/scheduler.kubeconfig
     defaultconf: /etc/kubernetes/manifests/kube-scheduler.yaml
 
   controllermanager:
@@ -60,18 +63,25 @@ master:
       - /etc/kubernetes/manifests/kube-controller-manager.manifest
       - /var/snap/kube-controller-manager/current/args
       - /var/lib/rancher/rke2/agent/pod-manifests/kube-controller-manager.yaml
+    kubeconfig:
+      - /var/lib/rancher/k3s/server/cred/controller.kubeconfig
+      - /var/lib/rancher/rke2/server/cred/controller.kubeconfig
     defaultconf: /etc/kubernetes/manifests/kube-controller-manager.yaml
 
   etcd:
     optional: true
     bins:
       - "etcd"
+    datadirs:
+      - /var/lib/rancher/k3s/server/db/etcd
+      - /var/lib/rancher/rke2/server/db/etcd
     confs:
       - /etc/kubernetes/manifests/etcd.yaml
       - /etc/kubernetes/manifests/etcd.manifest
       - /etc/etcd/etcd.conf
       - /var/snap/etcd/common/etcd.conf.yml
-      - /var/lib/rancher/rke2/server/db/etcd/config
+      - /var/lib/rancher/k3s/server/db/etcd/config
+      - /var/lib/rancher/rke2/agent/pod-manifests/etcd.yaml
     defaultconf: /etc/kubernetes/manifests/etcd.yaml
 
   flanneld:
@@ -116,7 +126,6 @@ node:
       - "/etc/kubernetes/kubelet-kubeconfig"
       - "/etc/kubernetes/ssl/kubecfg-kube-node.yaml"
       - "/var/lib/rancher/rke2/agent/kubelet.kubeconfig"
-      - "/var/lib/rancher/k3s/server/cred/admin.kubeconfig"
       - "/var/lib/rancher/k3s/agent/kubelet.kubeconfig"
     confs:
       - "/var/lib/kubelet/config.yaml"
@@ -134,8 +143,6 @@ node:
       - "/etc/systemd/system/kubelet.service"
       - "/lib/systemd/system/kubelet.service"
       - "/etc/systemd/system/snap.kubelet.daemon.service"
-      - "/etc/rancher/rke2/rke2.yaml"
-      - /var/lib/rancher/rke2/agent/kubelet.kubeconfig
     defaultconf: "/var/lib/kubelet/config.yaml"
     defaultsvc: "/etc/systemd/system/kubelet.service.d/10-kubeadm.conf"
     defaultkubeconfig: "/etc/kubernetes/kubelet.conf"
@@ -171,13 +178,16 @@ etcd:
     bins:
       - "etcd"
       - "containerd"
+    datadirs:
+      - /var/lib/rancher/k3s/server/db/etcd
+      - /var/lib/rancher/rke2/server/db/etcd
     confs:
       - /etc/kubernetes/manifests/etcd.yaml
       - /etc/kubernetes/manifests/etcd.manifest
       - /etc/etcd/etcd.conf
       - /var/snap/etcd/common/etcd.conf.yml
-      - /var/lib/rancher/rke2/agent/pod-manifests/etcd.yaml
       - /var/lib/rancher/k3s/server/db/etcd/config
+      - /var/lib/rancher/rke2/server/db/etcd/config
     defaultconf: /etc/kubernetes/manifests/etcd.yaml
 
 controlplane:
@@ -201,39 +211,50 @@ managedservices:
 
 # TODO: Clean up in the next refactor
 version_mapping:
-  "rke-1.13": 
+  "rke-1.13":
     - "rke-cis-1.4"
-  "rke-1.14": 
+  "rke-1.14":
     - "rke-cis-1.4"
-  "rke-1.15": 
+  "rke-1.15":
     - "rke-cis-1.5-permissive"
-  "rke-1.16": 
+  "rke-1.16":
     - "rke-cis-1.6-permissive"
-  "rke-1.17": 
+  "rke-1.17":
     - "rke-cis-1.6-permissive"
-  "rke-1.18": 
+  "rke-1.18":
     - "rke-cis-1.6-permissive"
-  "rke-1.19": 
+  "rke-1.19":
     - "rke-cis-1.20-permissive"
-  "rke-1.20": 
+  "rke-1.20":
     - "rke-cis-1.20-permissive"
-  "v1.18.10+rke2r1": 
+  "v1.18.10+rke2r1":
     - "rke2-cis-1.5-hardened"
     - "rke2-cis-1.5-permissive"
-  "eks-1.0.1": 
-    - "eks-1.0.1"
-  "gke-1.0": 
-    - "gke-1.0"
-  "aks-1.0": 
-    - "aks-1.0"	
-  "v1.20.5+rke2r1": 
+  "eks-1.2.0":
+    - "eks-1.2.0"
+  "gke-1.2.0":
+    - "gke-1.2.0"
+  "aks-1.0":
+    - "aks-1.0"
+  "v1.20.5+rke2r1":
     - "rke2-cis-1.6-hardened"
     - "rke2-cis-1.6-permissive"
-  "v1.20.5+k3s1": 
+  "v1.20.5+k3s1":
     - "k3s-cis-1.6-hardened"
     - "k3s-cis-1.6-permissive"
 
 target_mapping:
+  # EKS
+  "eks-1.2.0":
+    - "node"
+  # GKE
+  "gke-1.2.0":
+    - "node"
+  # AKS
+  "aks-1.0":
+    - "node"
+
+  # CIS - Generic profiles
   "cis-1.4":
     - "master"
     - "node"
@@ -261,18 +282,77 @@ target_mapping:
     - "node"
     - "controlplane"
     - "etcd"
-    - "policies"     
-  "rke-cis-1.4":
-    - "master"
-    - "node"
-    - "etcd"
-  "rke-cis-1.5-hardened":
+    - "policies"
+  "cis-1.24":
     - "master"
     - "node"
     - "controlplane"
     - "etcd"
     - "policies"
-  "rke2-cis-1.5-hardened":
+  "cis-1.7":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "cis-1.8":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+
+  # RKE1
+  # rke1: Generic
+  "rke-cis-1.4":
+    - "master"
+    - "node"
+    - "etcd"
+  # rke1: Permissive
+  "rke-cis-1.5-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "rke-cis-1.6-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "rke-cis-1.20-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "rke-cis-1.23-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "rke-cis-1.24-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "rke-cis-1.7-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "rke-cis-1.8-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  # rke1 : Hardened
+  "rke-cis-1.5-hardened":
     - "master"
     - "node"
     - "controlplane"
@@ -295,46 +375,30 @@ target_mapping:
     - "node"
     - "controlplane"
     - "etcd"
-    - "policies"    
-  "rke-cis-1.5-permissive":
+    - "policies"
+  "rke-cis-1.24-hardened":
     - "master"
     - "node"
     - "controlplane"
     - "etcd"
     - "policies"
+  "rke-cis-1.7-hardened":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "rke-cis-1.8-hardened":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+
+  # RKE2
+  # rke2: Generic
+  # rke2: Permissive
   "rke2-cis-1.5-permissive":
-    - "master"
-    - "node"
-    - "controlplane"
-    - "etcd"
-    - "policies"
-  "rke-cis-1.6-permissive":
-    - "master"
-    - "node"
-    - "controlplane"
-    - "etcd"
-    - "policies"
-  "rke-cis-1.20-permissive":
-    - "master"
-    - "node"
-    - "controlplane"
-    - "etcd"
-    - "policies"  
-  "rke-cis-1.23-permissive":
-    - "master"
-    - "node"
-    - "controlplane"
-    - "etcd"
-    - "policies"  
-  "eks-1.0.1":
-    - "node"
-  "gke-1.0":
-    - "node"
-    - "managedservices"
-    - "policies"
-  "aks-1.0":	
-    - "node"
-  "rke2-cis-1.6-hardened":
     - "master"
     - "node"
     - "controlplane"
@@ -346,13 +410,50 @@ target_mapping:
     - "controlplane"
     - "etcd"
     - "policies"
-  "rke2-cis-1.20-hardened":
+  "rke2-cis-1.20-permissive":
     - "master"
     - "node"
     - "controlplane"
     - "etcd"
     - "policies"
-  "rke2-cis-1.20-permissive":
+  "rke2-cis-1.23-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "rke2-cis-1.24-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "rke2-cis-1.7-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "rke2-cis-1.8-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  # rke2: Hardened
+  "rke2-cis-1.5-hardened":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "rke2-cis-1.6-hardened":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "rke2-cis-1.20-hardened":
     - "master"
     - "node"
     - "controlplane"
@@ -364,19 +465,66 @@ target_mapping:
     - "controlplane"
     - "etcd"
     - "policies"
-  "rke2-cis-1.23-permissive":
-    - "master"
-    - "node"
-    - "controlplane"
-    - "etcd"
-    - "policies"        
-  "k3s-cis-1.6-hardened":
+  "rke2-cis-1.24-hardened":
     - "master"
     - "node"
     - "controlplane"
     - "etcd"
     - "policies"
+  "rke2-cis-1.7-hardened":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "rke2-cis-1.8-hardened":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+
+  # K3S
+  # k3s: Generic
+  # k3s: Permissive
   "k3s-cis-1.6-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "k3s-cis-1.20-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "k3s-cis-1.23-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "k3s-cis-1.24-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "k3s-cis-1.7-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  "k3s-cis-1.8-permissive":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"
+  # k3s: Hardened
+  "k3s-cis-1.6-hardened":
     - "master"
     - "node"
     - "controlplane"
@@ -394,15 +542,21 @@ target_mapping:
     - "controlplane"
     - "etcd"
     - "policies"
-  "k3s-cis-1.20-permissive":
+  "k3s-cis-1.24-hardened":
     - "master"
     - "node"
     - "controlplane"
     - "etcd"
-    - "policies"   
-  "k3s-cis-1.23-permissive":
+    - "policies"
+  "k3s-cis-1.7-hardened":
     - "master"
     - "node"
     - "controlplane"
     - "etcd"
-    - "policies"    
+    - "policies"
+  "k3s-cis-1.8-hardened":
+    - "master"
+    - "node"
+    - "controlplane"
+    - "etcd"
+    - "policies"

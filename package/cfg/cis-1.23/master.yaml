@@ -1,6 +1,6 @@
 ---
 controls:
-version: "1.23"
+version: "cis-1.23"
 id: 1
 text: "Control Plane Security Configuration"
 type: "master"
@@ -339,7 +339,7 @@ groups:
               compare:
                 op: nothave
                 value: "DenyServiceExternalIPs"
-              set: true  
+              set: true
             - flag: "--enable-admission-plugins"
               set: false
         remediation: |

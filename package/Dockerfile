@@ -1,39 +1,131 @@
-FROM registry.suse.com/bci/bci-base:15.4
+# Platform specific images which must support all target architectures.
+FROM registry.suse.com/bci/bci-micro:15.6 AS final
+FROM registry.suse.com/bci/golang:1.22 AS golang
 
-ARG kube_bench_version=0.6.12
-ARG sonobuoy_version=0.56.16
-ARG kubectl_version=1.26.3
+# Builder and xx only need to support the host architecture.
+FROM --platform=$BUILDPLATFORM rancher/mirrored-tonistiigi-xx:1.5.0 AS xx
+FROM --platform=$BUILDPLATFORM registry.suse.com/bci/golang:1.22 AS builder
 
-RUN zypper --non-interactive update \
-    && zypper --non-interactive install \
-    curl \
-    jq \
-    vim \
-    systemd \
-    tar \
-    awk \
-    gzip
-RUN curl -sLf "https://storage.googleapis.com/kubernetes-release/release/v${kubectl_version}/bin/linux/amd64/kubectl" > "/usr/local/bin/kubectl-${kubectl_version}" \
-    && ln -sv "/usr/local/bin/kubectl-${kubectl_version}" /usr/local/bin/kubectl \
-    && chmod +x /usr/local/bin/kubectl*
-RUN curl -sLf "https://github.com/vmware-tanzu/sonobuoy/releases/download/v${sonobuoy_version}/sonobuoy_${sonobuoy_version}_linux_amd64.tar.gz" | tar -xvzf - -C /usr/bin sonobuoy
-RUN curl -sLf "https://github.com/aquasecurity/kube-bench/releases/download/v${kube_bench_version}/kube-bench_${kube_bench_version}_linux_amd64.tar.gz" | tar -xvzf - -C /usr/bin
+# Bring xx supporting tools to the builder layer, but as it is at / it
+# won't be copied to the final image.
+COPY --from=xx / /
 
-# Copy the files within /cfg straight from the immutable GitHub source to /etc/kube-bench/cfg/.
-RUN curl -sLf "https://github.com/aquasecurity/kube-bench/archive/refs/tags/v${kube_bench_version}.tar.gz" | \
-    tar xvz -C . --strip-components=1 "kube-bench-${kube_bench_version}/cfg"
+ARG SONOBUOY_VERSION
+# The upstream project hasn't been released in almost one year, which
+# caused it to accumulate several stdlib Golang vulnerabilities.
+RUN git clone --depth=1 https://github.com/vmware-tanzu/sonobuoy --branch "${SONOBUOY_VERSION}" --single-branch /go/src/github.com/vmware-tanzu/sonobuoy
 
-COPY package/cfg/ /etc/kube-bench/cfg/
+# From this point onwards, although everything will be executed at the
+# host architecture, it will fork and run separately for each target
+# arch/platform.
+ARG TARGETPLATFORM TARGETARCH
+RUN mkdir -p /run/lock
+
+# Set the final image base contents.
+COPY --from=final / /chroot/
+
+RUN cd /go/src/github.com/vmware-tanzu/sonobuoy && \
+    xx-go build -o /chroot/usr/bin/sonobuoy \
+        -ldflags "-s -w -X github.com/vmware-tanzu/sonobuoy/pkg/buildinfo.Version=${SONOBUOY_VERSION}-rancher -X github.com/vmware-tanzu/sonobuoy/pkg/buildinfo.GitSHA=$(git rev-parse HEAD)"
+RUN xx-verify /chroot/usr/bin/sonobuoy
+
+# The final image does not have zypper, so we amend the host zypper to
+# look for the target architecture instead, so we can avoid cross-emulation.
+RUN echo "[main]" > /etc/zypp/zypp.conf && \
+    echo -n "arch = " >> /etc/zypp/zypp.conf && \
+    xx-info march >> /etc/zypp/zypp.conf
+
+# Zypper uses the architecture defined on the files within /etc/products.d/
+# when fetching packages. Note that we are overriding host-based products.d
+# files, with the same files from golang for the target architecture.
+#
+# On an amd64 host and arm64 target, this will ensure the files used are based
+# on the arm64 version of /etc/products.d/.
+COPY --from=golang /etc/products.d/ /etc/products.d/
+# The zypper operations below will use an installroot. This copies the repository
+# information (based on target arch) to chroot, so that the zypper operation works.
+COPY --from=golang /etc/zypp/ /chroot/etc/zypp/
+
+# OS binaries to run kube-bench audit commands.
+# Before removing dependencies here, ensure they are not needed by cis-operator,
+# security-scan or any of the existing kube-bench tests.
+RUN zypper --non-interactive --releasever=15.6 refresh && \
+    zypper --installroot /chroot -n in --no-recommends findutils tar jq gawk diffutils procps systemd gzip curl && \
+    zypper --installroot /chroot clean -a && \
+    rm -rf /chroot/var/cache/zypp/* /chroot/var/log/zypp/* /chroot/etc/zypp/
+
+# Safety net to ensure we did not mess up on the zypper operations above,
+# and that the binaries are valid for the target architecture.
+RUN xx-verify /chroot/usr/bin/curl && \
+    xx-verify /chroot/usr/bin/diff && \
+    xx-verify /chroot/usr/bin/tar && \
+    xx-verify /chroot/usr/bin/jq && \
+    xx-verify /chroot/usr/bin/gzip
+
+# Define build arguments.
+ARG KUBE_BENCH_VERSION KUBE_BENCH_SUM_arm64 KUBE_BENCH_SUM_amd64 \
+    KUBECTL_VERSION KUBECTL_SUM_arm64 KUBECTL_SUM_amd64
+
+# Stage kubectl into builder.
+ADD --chown=root:root --chmod=0755 \
+    "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" \
+    /chroot/usr/local/bin/kubectl
+
+ENV KUBECTL_SUM="KUBECTL_SUM_${TARGETARCH}"
+RUN echo "${!KUBECTL_SUM}  /chroot/usr/local/bin/kubectl" | sha256sum -c -
+
+# Stage kube-bench into builder.
+ENV KUBE_BENCH_SUM="KUBE_BENCH_SUM_${TARGETARCH}"
+RUN curl --output /tmp/kubebench.tar.gz -sLf "https://github.com/aquasecurity/kube-bench/releases/download/${KUBE_BENCH_VERSION}/kube-bench_${KUBE_BENCH_VERSION#v}_linux_${TARGETARCH}.tar.gz" && \
+    echo "${!KUBE_BENCH_SUM}  /tmp/kubebench.tar.gz" | sha256sum -c - && \
+    tar -xvzf /tmp/kubebench.tar.gz -C /chroot/usr/bin
+
+# Copy the files within /cfg straight from the immutable GitHub source to /etc/kube-bench/cfg/ into micro
+RUN mkdir -p /chroot/etc/kube-bench/ && \
+    curl --output - -sLf "https://github.com/aquasecurity/kube-bench/archive/refs/tags/${KUBE_BENCH_VERSION}.tar.gz" | \
+    tar xvz -C /chroot/etc/kube-bench/ --strip-components=1 "kube-bench-${KUBE_BENCH_VERSION#v}/cfg"
+
+WORKDIR /src
+COPY go.sum \
+     go.mod \
+     Makefile \
+     /src
+RUN go mod download
+
+COPY pkg /src/pkg
+COPY hack /src/hack
+COPY cmd /src/cmd
+
+# Wraps the go compiler so that it automatically takes into account TARGETPLATFORM.
+RUN xx-go --wrap 
+
+# By setting the version as an argument, we can avoid running the version logic 
+# a second time (inside the Docker build process). Therefore, removing the need
+# to access the .git dir.
+ARG VERSION
+RUN VERSION=${VERSION} TARGET_BIN=/chroot/usr/bin/kb-summarizer make build
+
+# Ensures that the binary that was built is valid for the target platform.
+RUN xx-verify --static /chroot/usr/bin/kb-summarizer
+
+# Override kube-bench cfg files without duplicating them on the final image.
+COPY package/cfg/ /chroot/etc/kube-bench/cfg/
+
+
+# By using scratch we avoid duplicating files on the final image,
+# as otherwise the COPY below would override the differences between
+# /chroot and "final", increasing the image layer by ~10MB. 
+FROM scratch
+
+COPY --from=builder /chroot/ /
 COPY package/run.sh \
     package/run_sonobuoy_plugin.sh \
-    bin/kb-summarizer \
     package/helper_scripts/check_files_permissions.sh \
     package/helper_scripts/check_files_owner_in_dir.sh \
     package/helper_scripts/check_encryption_provider_config.sh \
     package/helper_scripts/check_for_network_policies.sh \
     package/helper_scripts/check_for_default_sa.sh \
     package/helper_scripts/check_for_default_ns.sh \
-    package/helper_scripts/check_for_k3s_etcd.sh \
     package/helper_scripts/check_for_rke2_network_policies.sh \
     package/helper_scripts/check_for_rke2_cni_net_policy_support.sh \
     package/helper_scripts/check_cafile_permissions.sh \
